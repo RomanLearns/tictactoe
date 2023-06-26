@@ -88,6 +88,7 @@ let _ = score
 let compute_next_move ~(me : Piece.t) ~(game_state : Game_state.t)
   : Position.t
   =
+  ignore me;
   let pieces = game_state.pieces in
   let game_kind = game_state.game_kind in
   random_move_strategy ~game_kind ~pieces
