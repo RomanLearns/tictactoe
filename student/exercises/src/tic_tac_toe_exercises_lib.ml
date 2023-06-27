@@ -75,6 +75,31 @@ let available_moves
   List.filter board_list ~f:(fun pos -> not (Map.mem pieces pos))
 ;;
 
+(* Checking the horizontal options for a set of keys. For a given type of
+   piece, we want to check win_count boxes in a row to see if they all
+   match *)
+let rec check_line
+  ~(position : Position.t)
+  ~(positions : Position.Set.t)
+  ~(game_kind : Game_kind.t)
+  ~(dir : Position.t -> Position.t)
+  ~(count : int)
+  =
+  let next_pos = dir position in
+  if count = 0
+  then true (* check if the next position exists*)
+  else if Set.exists positions ~f:(fun pos -> Position.equal next_pos pos)
+          && Position.in_bounds next_pos ~game_kind
+  then
+    check_line
+      ~position:next_pos
+      ~positions
+      ~game_kind
+      ~dir
+      ~count:(count - 1)
+  else false
+;;
+
 (* Exercise 2.
 
    For instructions on implemeting this refer to the README.
@@ -84,9 +109,60 @@ let available_moves
 let evaluate ~(game_kind : Game_kind.t) ~(pieces : Piece.t Position.Map.t)
   : Evaluation.t
   =
-  ignore pieces;
-  ignore game_kind;
-  failwith "Implement me!"
+  (* Method of solving: iterate through the pieces positions a number of
+     pieces at at time and check horizontally, vertically, and diagonally *)
+  let x_keys = Map.filter pieces ~f:(Piece.equal X) in
+  let o_keys = Map.filter pieces ~f:(Piece.equal O) in
+  let x_set = Map.key_set x_keys in
+  let o_set = Map.key_set o_keys in
+  let directions =
+    [ Position.right; Position.down; Position.down_right; Position.up_right ]
+  in
+  if Set.exists x_set ~f:(fun pos ->
+       List.exists directions ~f:(fun dir ->
+         check_line
+           ~position:pos
+           ~positions:x_set
+           ~game_kind
+           ~dir
+           ~count:(Game_kind.win_length game_kind - 1)))
+  then Game_over { winner = Some X }
+  else if Set.exists o_set ~f:(fun pos ->
+            List.exists directions ~f:(fun dir ->
+              check_line
+                ~position:pos
+                ~positions:o_set
+                ~game_kind
+                ~dir
+                ~count:(Game_kind.win_length game_kind - 1)))
+  then Game_over { winner = Some O }
+  else Game_continues
+;;
+
+let w_check_line
+  ~(position : Position.t)
+  ~(positions : Position.t list)
+  ~(game_kind : Game_kind.t)
+  ~(dir : Position.t -> Position.t)
+  ~(count : int)
+  ~(pieces : Piece.t Position.Map.t)
+  =
+  let next_pos = dir position in
+  if count = 0
+     && List.exists (available_moves ~game_kind ~pieces) ~f:(fun pos ->
+          Position.equal pos next_pos)
+  then true (* check if the next position exists*)
+  else if List.exists positions ~f:(fun pos -> Position.equal next_pos pos)
+          && Position.in_bounds next_pos ~game_kind
+  then (
+    let pos_set = Position.Set.of_list positions in
+    check_line
+      ~position:next_pos
+      ~positions:pos_set
+      ~game_kind
+      ~dir
+      ~count:(count - 1))
+  else false
 ;;
 
 (* Exercise 3. *)
@@ -96,10 +172,29 @@ let winning_moves
   ~(pieces : Piece.t Position.Map.t)
   : Position.t list
   =
-  ignore me;
-  ignore game_kind;
-  ignore pieces;
-  failwith "Implement me!"
+  let directions =
+    [ Position.right
+    ; Position.down
+    ; Position.down_right
+    ; Position.up_right
+    ; Position.left
+    ; Position.up
+    ; Position.down_left
+    ; Position.up_left
+    ]
+  in
+  let me_pieces = Map.filter pieces ~f:(Piece.equal me) in
+  let me_list = Map.keys me_pieces in
+  let moves = available_moves ~game_kind ~pieces in
+  List.filter moves ~f:(fun move ->
+    List.exists directions ~f:(fun dir ->
+      w_check_line
+        ~position:move
+        ~positions:me_list
+        ~game_kind
+        ~dir
+        ~count:(Game_kind.win_length game_kind - 1)
+        ~pieces))
 ;;
 
 (* Exercise 4. *)
@@ -235,22 +330,41 @@ let%expect_test "no available_moves" =
 
 (* When you've implemented the [evaluate] function, uncomment the next two
    tests! *)
-(* let%expect_test "evalulate_win_for_x" = print_endline (evaluate
-   ~game_kind:win_for_x.game_kind ~pieces:win_for_x.pieces |>
-   Evaluation.to_string); [%expect {| (Win (X)) |}] ;;
+let%expect_test "evalulate_win_for_x" =
+  print_endline
+    (evaluate ~game_kind:win_for_x.game_kind ~pieces:win_for_x.pieces
+     |> Evaluation.to_string);
+  [%expect {| (Game_over(winner(X))) |}]
+;;
 
-   let%expect_test "evalulate_non_win" = print_endline (evaluate
-   ~game_kind:non_win.game_kind ~pieces:non_win.pieces |>
-   Evaluation.to_string); [%expect {| Game_continues |}] ;; *)
+let%expect_test "evalulate_non_win" =
+  print_endline
+    (evaluate ~game_kind:non_win.game_kind ~pieces:non_win.pieces
+     |> Evaluation.to_string);
+  [%expect {| Game_continues |}]
+;;
 
 (* When you've implemented the [winning_moves] function, uncomment this
    test! *)
-(*let%expect_test "winning_move" = let positions = winning_moves
-  ~game_kind:non_win.game_kind ~pieces:non_win.pieces ~me:Piece.X in print_s
-  [%sexp (positions : Position.t list)]; [%expect {| ((((row 1) (column 1))))
-  |}]; let positions = winning_moves ~game_kind:non_win.game_kind
-  ~pieces:non_win.pieces ~me:Piece.O in print_s [%sexp (positions :
-  Position.t list)]; [%expect {| () |}] ;;*)
+let%expect_test "winning_move" =
+  let positions =
+    winning_moves
+      ~game_kind:non_win.game_kind
+      ~pieces:non_win.pieces
+      ~me:Piece.X
+  in
+  print_s [%sexp (positions : Position.t list)];
+  [%expect {| ((((row 1) (column 1))))
+  |}];
+  let positions =
+    winning_moves
+      ~game_kind:non_win.game_kind
+      ~pieces:non_win.pieces
+      ~me:Piece.O
+  in
+  print_s [%sexp (positions : Position.t list)];
+  [%expect {| () |}]
+;;
 
 (* When you've implemented the [losing_moves] function, uncomment this
    test! *)
