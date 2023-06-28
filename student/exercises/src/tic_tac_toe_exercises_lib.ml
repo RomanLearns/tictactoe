@@ -139,7 +139,7 @@ let evaluate ~(game_kind : Game_kind.t) ~(pieces : Piece.t Position.Map.t)
   else Game_continues
 ;;
 
-let w_check_line
+let w_check_opp_line
   ~(position : Position.t)
   ~(positions : Position.t list)
   ~(game_kind : Game_kind.t)
@@ -165,6 +165,41 @@ let w_check_line
   else false
 ;;
 
+let w_check_line
+  ~(position : Position.t)
+  ~(og_position : Position.t)
+  ~(positions : Position.t list)
+  ~(game_kind : Game_kind.t)
+  ~(dir : Position.t -> Position.t)
+  ~(op_dir : Position.t -> Position.t)
+  ~(count : int)
+  ~(pieces : Piece.t Position.Map.t)
+  =
+  let next_pos = dir position in
+  if count = 0
+     && List.exists (available_moves ~game_kind ~pieces) ~f:(fun pos ->
+          Position.equal pos next_pos)
+  then true (* check if the next position exists*)
+  else if List.exists positions ~f:(fun pos -> Position.equal next_pos pos)
+          && Position.in_bounds next_pos ~game_kind
+  then (
+    let pos_set = Position.Set.of_list positions in
+    check_line
+      ~position:next_pos
+      ~positions:pos_set
+      ~game_kind
+      ~dir
+      ~count:(count - 1))
+  else
+    w_check_opp_line
+      ~position:og_position
+      ~positions
+      ~game_kind
+      ~dir:op_dir
+      ~count
+      ~pieces
+;;
+
 (* Exercise 3. *)
 let winning_moves
   ~(me : Piece.t)
@@ -173,26 +208,24 @@ let winning_moves
   : Position.t list
   =
   let directions =
-    [ Position.right
-    ; Position.down
-    ; Position.down_right
-    ; Position.up_right
-    ; Position.left
-    ; Position.up
-    ; Position.down_left
-    ; Position.up_left
+    [ Position.right, Position.left
+    ; Position.down, Position.up
+    ; Position.down_right, Position.up_left
+    ; Position.up_right, Position.down_left
     ]
   in
   let me_pieces = Map.filter pieces ~f:(Piece.equal me) in
   let me_list = Map.keys me_pieces in
   let moves = available_moves ~game_kind ~pieces in
   List.filter moves ~f:(fun move ->
-    List.exists directions ~f:(fun dir ->
+    List.exists directions ~f:(fun (dir, op_dir) ->
       w_check_line
         ~position:move
+        ~og_position:move
         ~positions:me_list
         ~game_kind
         ~dir
+        ~op_dir
         ~count:(Game_kind.win_length game_kind - 1)
         ~pieces))
 ;;
