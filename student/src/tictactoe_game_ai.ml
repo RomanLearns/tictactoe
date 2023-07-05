@@ -83,17 +83,10 @@ let score
   ~(pieces : Piece.t Position.Map.t)
   : float
   =
-  let win_list =
-    Tic_tac_toe_exercises_lib.winning_moves ~me ~game_kind ~pieces
-  in
-  let lose_list =
-    Tic_tac_toe_exercises_lib.losing_moves ~me ~game_kind ~pieces
-  in
-  if List.length win_list > 1 && List.length lose_list = 0
-  then Float.infinity
-  else if List.length lose_list > 1 && List.length win_list = 0
-  then Float.neg_infinity
-  else Float.zero
+  match evaluate ~game_kind ~pieces with
+  | Game_over { winner = Some piece } ->
+    if Piece.equal me piece then Float.infinity else Float.neg_infinity
+  | _ -> Float.zero
 ;;
 
 let _ = score
@@ -139,6 +132,7 @@ let rec minimax
     score ~me:player ~game_kind ~pieces:new_pieces
   else if maximizingPlayer
   then (
+    (* print_s [%message "" ("maximizingPlayer" : String.t)]; *)
     let avmoves = available_moves ~game_kind ~pieces:new_pieces in
     avmoves
     |> List.map ~f:(fun new_pos ->
@@ -152,6 +146,7 @@ let rec minimax
            player)
     |> List.fold ~init:Float.neg_infinity ~f:Float.max)
   else (
+    (* print_s [%message "" ("minimizingPlayer" : String.t)]; *)
     let avmoves = available_moves ~game_kind ~pieces:new_pieces in
     avmoves
     |> List.map ~f:(fun new_pos ->
@@ -190,7 +185,7 @@ let compute_next_move ~(me : Piece.t) ~(game_state : Game_state.t)
   match
     avmoves
     |> List.map ~f:(fun pos ->
-         minimax pos 11 true me pieces game_state me, pos)
+         minimax pos 1 true me pieces game_state me, pos)
     |> List.max_elt ~compare:(fun (v1, _pos1) (v2, _pos2) ->
          print_s [%message "" (v1 : Float.t)];
          print_s [%message "" (_pos1 : Position.t)];
